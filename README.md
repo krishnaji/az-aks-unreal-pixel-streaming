@@ -1,5 +1,7 @@
 # The Unreal Pixel Streaming On Azure Kubernetes Service!
 Referenece Repo to deploy Unreal Pixel Streaming on AKS
+
+![](UEPS.gif)
 ## Build and Push Matchmaker,Signalling,TURN and Game Images
 ``` bash
 ./docker-build.sh
@@ -41,6 +43,6 @@ az aks create -g pixel_group -n uepixelstrm --enable-managed-identity --node-cou
 ```bash 
     kubectl apply -f aks-deploy.yaml
 ```
-
+![](aks.png)
 ## Legal
 © 2004-2022, Epic Games, Inc. Unreal and its logo are Epic’s trademarks or registered trademarks in the US and elsewhere. 
