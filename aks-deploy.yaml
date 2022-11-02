@@ -1,0 +1,208 @@
+# PixelStreaming Config
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pixel-streaming-config
+data:
+  matchmaker.json:  |
+    {
+    "HttpPort": "90",
+    "UseHTTPS": "false",
+    "MatchmakerPort": "9999",
+    "LogToFile": "true"
+    }
+  signallingserver.json:  |
+    {
+      "UseFrontend": false,
+      "UseMatchmaker": true,
+      "UseHTTPS": false,
+      "UseAuthentication": false,
+      "LogToFile": true,
+      "LogVerbose": true,
+      "HomepageFile": "player.html",
+      "AdditionalRoutes": {},
+      "EnableWebserver": true,
+      "MatchmakerAddress": "matchmaker",
+      "MatchmakerPort": "9999",
+      "PublicIp": "20.85.136.156",
+      "HttpPort": 80,
+      "HttpsPort": 443,
+      "StreamerPort": 8888,
+      "SFUPort": 8889,
+      "MaxPlayerCount": -1
+    }
+--- 
+
+# MatchMaker Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: matchmaker
+  labels:
+    app: matchmaker
+spec:
+  ports:
+  - port: 90
+    targetPort: 90
+    name: port90
+  - port: 9999
+    targetPort: 9999
+    name: port9999
+  selector:
+    app: matchmaker 
+  type: LoadBalancer
+
+--- 
+# SignallingServer Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: signallingserver
+  labels:
+    app: signallingserver
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    name: port80
+  - port: 8888
+    targetPort: 8888
+    name: port8888
+  selector:
+    app: signallingserver 
+  type: LoadBalancer
+---
+# TURN Server Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: turnserver
+  labels:
+    app: turnserver
+spec:
+  ports:
+  - port: 3478
+    targetPort: 3478
+    name: portudp3478
+    protocol: UDP
+  - port: 3478
+    targetPort: 3478
+    name: porttcp3478
+    protocol: TCP
+  selector:
+    app: turnserver 
+  type: LoadBalancer
+---
+# Deploy  MatchMaker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matchmaker
+  labels:
+    app: matchmaker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: matchmaker
+  template:
+    metadata:
+      labels:
+        app: matchmaker
+    spec:
+      containers:
+      - name: matchmaker
+        image: fancy.azurecr.io/matchmaker:4.27
+        ports:
+        - containerPort: 90
+        - containerPort: 9999
+        volumeMounts:
+        - name: pixel-streaming-config
+          mountPath: /config
+      volumes:
+        - name: pixel-streaming-config
+          configMap:
+            name: pixel-streaming-config 
+
+
+---
+# Deploy SignallingServer
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signallingserver
+  labels:
+    app: signallingserver
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: signallingserver
+  template:
+    metadata:
+      labels:
+        app: signallingserver
+    spec:
+      containers:
+      - name: signallingserver
+        image: fancy.azurecr.io/signallingwebserver:4.27
+        args: 
+          - --configFile=/config/signallingserver.json
+          - --peerConnectionOptions={"iceServers":[{"urls":["turn:20.232.233.5:3478"],"username":"usr","credential":"usr123"}]}
+        ports:
+        - containerPort: 80
+        - containerPort: 8888
+        volumeMounts:
+        - name: pixel-streaming-config
+          mountPath: /config
+      - name: game
+        image: fancy.azurecr.io/game:4.27
+        env:
+        -  name: SIGNALSERVER_URL
+           value: ws://signallingserver:8888
+      volumes:
+        - name: pixel-streaming-config
+          configMap:
+            name: pixel-streaming-config
+      tolerations:
+      - key: "sku"
+        operator: "Equal"
+        value: "gpu"
+        effect: "NoSchedule"
+
+---
+# Kubernetes TURN Server DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: turnserver
+  labels:
+    app: turnserver
+spec:
+  selector:
+    matchLabels:
+      app: turnserver
+  template:
+    metadata:
+      labels:
+        app: turnserver
+    spec:
+      nodeSelector:
+        "agentpool": "turnp"
+      tolerations:
+      - key: "sku"
+        operator: "Equal"
+        value: "turn"
+        effect: "NoSchedule"   
+      hostNetwork: true
+      containers:
+      - name: turnserver
+        image: fancy.azurecr.io/turn:latest
+        ports:
+        - containerPort: 3478
+          protocol: UDP
+          name: udp
+        - containerPort: 3478
+          protocol: TCP
+          name: tcp
+
