@@ -2,7 +2,8 @@
 # Copyright Epic Games, Inc. All Rights Reserved.
 
 FROM --platform=${BUILDPLATFORM:-linux/amd64} node:latest
-
+# Install jq
+RUN apt-get update && apt-get install -y jq
 # Copy the signalling server source code to the Docker build context
 COPY . /opt/SignallingWebServer
 
