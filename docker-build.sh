@@ -2,7 +2,7 @@
 CONTINAER_REG="fancy.azurecr.io"
 # Build Matchmaker image
 cd Matchmaker/platform_scripts/bash
-docker build -t matchmaker:4.27 -f Dockerfile .
+docker build -t matchmaker:4.27 -f Dockerfile ../..
 # Build Signalling image
 cd SignallingWebServer/platform_scripts/bash/
 docker build -t signallingwebserver:4.27 -f ./Dockerfile ../..
