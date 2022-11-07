@@ -2,41 +2,38 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: kubectl-client
+  namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: kubectl-client
-  namespace: default
 rules:
 - apiGroups:
   - ""
   resources:
-  - services
   - configmaps
-  - pods
   verbs:
-  - get
-  - list
-  - create
-  - update
-  - patch
-  - delete
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - '*'
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: kubectl-client
-  namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: kubectl-client
 subjects:
 - kind: ServiceAccount
   name: kubectl-client
   namespace: default
-
 ---
 # PixelStreaming Config
 apiVersion: v1
@@ -64,7 +61,7 @@ data:
       "EnableWebserver": true,
       "MatchmakerAddress": "matchmaker",
       "MatchmakerPort": "9999",
-      "PublicIp": "20.85.136.156",
+      "PublicIp": "",
       "HttpPort": 80,
       "HttpsPort": 443,
       "StreamerPort": 8888,
@@ -189,35 +186,30 @@ spec:
         - |
           signallingLoadBalancerIP=""
           while [ -z "$signallingLoadBalancerIP" ]; do
-              signallingLoadBalancerIP=$(kubectl get service matchmaker -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+              signallingLoadBalancerIP=$(kubectl get service signallingserver -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
               sleep 5
           done
+          echo "signallingLoadBalancerIP=$signallingLoadBalancerIP" > /tmp/ip.txt
           turnLoadBalancerIP=""
           while [ -z "$turnLoadBalancerIP" ]; do
-              turnLoadBalancerIP=$(kubectl get service matchmaker -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+              turnLoadBalancerIP=$(kubectl get service turnserver -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
               sleep 5
           done
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: pixel-streaming-config-ips
-            namespace: default
-          data:
-            PublicIp: ${signallingLoadBalancerIP}
-            TurnIP: ${turnLoadBalancerIP}
-          EOF
-          sleep 5    
+          echo "turnLoadBalancerIP=$turnLoadBalancerIP" >> /tmp/ip.txt
+          # Delete the old configmap if it exists
+          kubectl delete configmap signallingserver-config-ips --ignore-not-found
+          kubectl create configmap signallingserver-config-ips --from-env-file=/tmp/ip.txt
+          sleep 10    
       containers:
       - name: signallingserver
         image: fancy.azurecr.io/signallingwebserver:4.27
         envFrom:
         - configMapRef:
-            name: pixel-streaming-config-ips
+            name: signallingserver-config-ips
         args: 
           - --configFile=/config/signallingserver.json
-          - --peerConnectionOptions={"iceServers":[{"urls":["turn:$(TurnIP):3478"],"username":"usr","credential":"usr123"}]}
-          - --PublicIp=$(PublicIp)
+          - --peerConnectionOptions={"iceServers":[{"urls":["turn:$(turnLoadBalancerIP):3478"],"username":"usr","credential":"usr123"}]}
+          - --PublicIp=$(signallingLoadBalancerIP)
         ports:
         - containerPort: 80
         - containerPort: 8888
