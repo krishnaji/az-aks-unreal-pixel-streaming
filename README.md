@@ -44,5 +44,24 @@ az aks create -g pixel_group -n uepixelstrm --enable-managed-identity --node-cou
     kubectl apply -f aks-deploy.yaml
 ```
 ![](aks.png)
+
+# Autoscale Deployment of the Unreal Pixel Streaming On Azure Kubernetes Service!
+
+This is reference implementation for autoscaling of signalling servers based on number of connected players.
+
+## Deploy Redis server to store realtime count of current connected palyers
+
+```bash
+kubectl run --image=bitnami/redis:latest --env="ALLOW_EMPTY_PASSWORD=yes" redis
+kubectl expose pod redis --port=6379 --target-port=6379
+```
+
+## Deploy Autoscaled Pixel Streaming Services on AKS
+```bash
+ kubectl apply -f aks-deploy-autoscale.yaml
+ ```
+
+![](SignallingAutoScale.gif)
+
 ## Legal
 © 2004-2022, Epic Games, Inc. Unreal and its logo are Epic’s trademarks or registered trademarks in the US and elsewhere. 
